@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"log"
@@ -22,6 +23,14 @@ var (
 	period     = flag.Int("period", 3, "Periodic time in hours to recheck the external IP address")
 )
 
+var router *upnp.IGD
+
+//Message Used to hold MQTT JSON messages
+type Message struct {
+	Port        int
+	Description string
+}
+
 //Connect to the MQTT broker
 func connectMQTT() (mqtt.Client, error) {
 	opts := mqtt.NewClientOptions().AddBroker("tcp://" + *mqttBroker)
@@ -37,6 +46,28 @@ func connectMQTT() (mqtt.Client, error) {
 	}
 
 	return client, nil
+}
+
+//Callback for MQTT messages received through the subscribed topic
+func mqttCallback(client mqtt.Client, msg mqtt.Message) {
+
+	var jsonMessage Message
+	log.Printf("Message received: %s", msg.Payload())
+
+	err := json.Unmarshal(msg.Payload(), &jsonMessage)
+	if err != nil {
+		log.Printf("Error parsing JSON: %s", err)
+	}
+
+	port := jsonMessage.Port
+	desc := jsonMessage.Description
+
+	err = router.Forward(uint16(port), desc)
+	if err != nil {
+		log.Printf("Error forwarding port: %s", err)
+	}
+
+	log.Printf("Port %d forwarded", port)
 }
 
 func init() {
@@ -60,18 +91,24 @@ func main() {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
-	d, err := upnp.DiscoverCtx(ctx)
+	router, err = upnp.DiscoverCtx(ctx)
 	if err != nil {
-		log.Printf("Error discovering router: %s", err)
+		log.Fatalf("Error discovering router: %s", err)
 	}
 
 	log.Printf("Router discovered")
+
+	if token := clientMQTT.Subscribe(*topic+"/portmapping", 0, mqttCallback); token.Wait() && token.Error() != nil {
+		log.Fatalf("Error subscribing to topic %s : %s", *topic+"/portmapping", err)
+	}
+
+	log.Printf("Subscribed to topic %s", *topic+"/portmapping")
 
 	for {
 
 		var msg string
 
-		ip, err := d.ExternalIP()
+		ip, err := router.ExternalIP()
 		if err != nil {
 			log.Printf("Error getting external IP from router: %s", err)
 		}
@@ -79,7 +116,7 @@ func main() {
 		log.Printf("UPNP external IP: %s", ip)
 		msg = ip
 
-		if token := clientMQTT.Publish(*topic, 0, false, msg); token.Wait() && token.Error() != nil {
+		if token := clientMQTT.Publish(*topic+"/externalip", 0, false, msg); token.Wait() && token.Error() != nil {
 			log.Printf("Error publishing message to MQTT broker: %s", token.Error())
 		}
 
