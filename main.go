@@ -120,7 +120,7 @@ func main() {
 			log.Printf("Error publishing message to MQTT broker: %s", token.Error())
 		}
 
-		time.Sleep(time.Duration(*period) * time.Second)
+		time.Sleep(time.Duration(*period) * time.Hour)
 
 	}
 
