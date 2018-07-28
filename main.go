@@ -27,6 +27,7 @@ var router *upnp.IGD
 
 //Message Used to hold MQTT JSON messages
 type Message struct {
+	Type        string
 	Port        int
 	Description string
 }
@@ -59,15 +60,28 @@ func mqttCallback(client mqtt.Client, msg mqtt.Message) {
 		log.Printf("Error parsing JSON: %s", err)
 	}
 
+	typeMsg := jsonMessage.Type
 	port := jsonMessage.Port
-	desc := jsonMessage.Description
 
-	err = router.Forward(uint16(port), desc)
-	if err != nil {
-		log.Printf("Error forwarding port: %s", err)
+	switch typeMsg {
+	case "FWD":
+		desc := jsonMessage.Description
+
+		err = router.Forward(uint16(port), desc)
+		if err != nil {
+			log.Printf("Error forwarding port: %s", err)
+		}
+
+		log.Printf("Port %d forwarded", port)
+	case "CLR":
+		err = router.Clear(uint16(port))
+		if err != nil {
+			log.Printf("Error deleting forwarded port: %s", err)
+		}
+
+		log.Printf("Port %d cleared", port)
 	}
 
-	log.Printf("Port %d forwarded", port)
 }
 
 func init() {
