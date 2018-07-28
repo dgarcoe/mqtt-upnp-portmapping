@@ -13,8 +13,6 @@ import (
 	mqtt "github.com/eclipse/paho.mqtt.golang"
 )
 
-const externalIPService string = "http://ipecho.net/plain"
-
 var (
 	mqttBroker = flag.String("mqttBroker", "", "MQTT broker URI (mandatory). E.g.:192.168.1.1:1883")
 	topic      = flag.String("topic", "", "Topic where hub-ctrl messages will be received (mandatory)")
